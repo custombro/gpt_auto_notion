@@ -1,33 +1,24 @@
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify
+import os
 
 app = Flask(__name__)
 
-# ----------------------
-# 기본 홈 경로
-# ----------------------
 @app.route("/")
 def home():
-    return "Server is running ✅"
+    return "Server is running.", 200
 
-# ----------------------
-# Render Health Check
-# ----------------------
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "ok"}), 200
 
-# ✅ Render 기본 헬스 체크는 /healthz 이므로 추가
-@app.route("/healthz")
-def healthz():
-    return jsonify({"status": "ok"})
+@app.route("/debug")
+def debug():
+    cwd = os.getcwd()
+    files = os.listdir(cwd)
+    return jsonify({
+        "cwd": cwd,
+        "files": files
+    }), 200
 
-# ----------------------
-# Task 생성 엔드포인트
-# ----------------------
-@app.route("/tasks/create", methods=["GET", "POST"])
-def create_task():
-    if request.method == "POST":
-        data = request.json
-        return jsonify({"received": data}), 201
-
-    return "Use POST to create tasks"
+# ❌ app.run() 제거! (Render에서는 사용 금지)
+# 절대 넣지 말 것
