@@ -2,24 +2,5 @@ services:
   - type: web
     name: gpt_auto_notion
     env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn -b 0.0.0.0:$PORT app:app"
-    plan: free
-
-# Render의 Cron Jobs
-jobs:
-  # 1) 매시간 자동 실행 (정각)
-  - name: hourly_automation
-    env: docker
-    plan: free
-    schedule: "0 * * * *"
-    dockerCommand: >
-      curl -sS https://gpt-auto-notion.onrender.com/run_automation
-
-  # 2) 매일 오전 9시 자동 보고서
-  - name: daily_report_9am
-    env: docker
-    plan: free
-    schedule: "0 0 * * *"
-    dockerCommand: >
-      curl -sS https://gpt-auto-notion.onrender.com/report/daily
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn -b 0.0.0.0:10000 app:app

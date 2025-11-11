@@ -1,61 +1,62 @@
-from flask import Flask, jsonify, request
+from flask import Flask, request
 import os
-from automation_handler import (
-    run_automation,
-    pull_orders_and_save,
-    generate_details_pipeline,
-    image_sort_pipeline,
-    send_daily_report
-)
+import requests
+from apscheduler.schedulers.background import BackgroundScheduler
+from automation_handler import run_automation
 
 app = Flask(__name__)
 
-@app.route("/")
-def home():
-    return "Server is running.", 200
+# ✅ 환경변수 로딩
+NOTION_CLIENT_ID = os.getenv("NOTION_CLIENT_ID")
+NOTION_CLIENT_SECRET = os.getenv("NOTION_CLIENT_SECRET")
+NOTION_REDIRECT_URI = os.getenv("NOTION_REDIRECT_URI")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+KAKAO_ACCESS_TOKEN = os.getenv("KAKAO_ACCESS_TOKEN")
 
-@app.route("/health")
-def health():
-    return jsonify({"status": "ok"}), 200
+# ✅ OAuth Callback (NOTION → 서버)
+@app.route('/', methods=['GET'])
+def notion_oauth_callback():
+    code = request.args.get("code")
 
-@app.route("/debug")
-def debug():
-    import os
-    cwd = os.getcwd()
-    files = os.listdir(cwd)
-    return jsonify({"cwd": cwd, "files": files}), 200
+    if not code:
+        return "✅ Server is running.<br>OAuth code 없음.", 200
 
-# 1) 매시간 자동 실행(핵심 루틴)
-@app.route("/run_automation")
-def run_automation_route():
+    # ✅ 토큰 교환
+    token_res = requests.post(
+        "https://api.notion.com/v1/oauth/token",
+        auth=(NOTION_CLIENT_ID, NOTION_CLIENT_SECRET),
+        json={
+            "grant_type": "authorization_code",
+            "code": code,
+            "redirect_uri": NOTION_REDIRECT_URI
+        },
+        headers={"Content-Type": "application/json"}
+    )
+
+    if token_res.status_code != 200:
+        return f"❌ Token exchange failed:<br>{token_res.text}", 500
+
+    data = token_res.json()
+    access_token = data.get("access_token")
+
+    return f"""
+    ✅ Notion OAuth 성공!<br><br>
+    Access Token:<br>{access_token}<br><br>
+    👉 이 값을 Render 환경변수 NOTION_TOKEN 에 저장하세요.
+    """
+
+# ✅ 수동 실행
+@app.route('/run_automation', methods=['GET'])
+def run_now():
     result = run_automation()
-    return jsonify(result), 200
-
-# 2) 주문 수집 → DB 저장 (수동 트리거용)
-@app.route("/orders/pull")
-def pull_orders_route():
-    result = pull_orders_and_save()
-    return jsonify(result), 200
-
-# 3) 상세페이지 자동 생성 파이프라인
-@app.route("/pipeline/generate")
-def pipeline_generate_route():
-    result = generate_details_pipeline()
-    return jsonify(result), 200
-
-# 4) 이미지 URL 자동 분류/정리
-@app.route("/images/sort")
-def images_sort_route():
-    result = image_sort_pipeline()
-    return jsonify(result), 200
-
-# 5) 매일 자동 보고서 (수동 트리거)
-@app.route("/report/daily")
-def report_daily_route():
-    result = send_daily_report()
-    return jsonify(result), 200
+    return f"✅ 실행 완료:<br>{result}", 200
 
 
-if __name__ == "__main__":
-    # 로컬 테스트용
-    app.run(host="0.0.0.0", port=5000)
+# ✅ 자동 실행 스케줄러
+scheduler = BackgroundScheduler()
+scheduler.add_job(run_automation, 'interval', hours=1)
+scheduler.start()
+
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
